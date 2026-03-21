@@ -6,24 +6,76 @@ A Claude Code statusline that shows **live security status** for your project wh
 
 ```
 🔒 snyk │ deps H:4 M:2 (6↑) │ code H:2 M:3 (4↑) │ test-project · 5m ago ⟳
-🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
-🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
-🔒 snyk │ no deps to scan │ no code to scan │ bare-project
-🔒 snyk │ ⚠ auth required  run: snyk auth
 ```
 
-| Segment | Meaning |
-|---|---|
-| `deps H:N M:N` | Dependency vulnerability counts by severity (SCA) |
-| `code H:N M:N` | Source code security issue counts by severity (SAST) |
-| `deps ✔` / `code ✔` | That scan found no issues |
-| `(N↑)` | N issues have an available fix |
-| `C:N H:N M:N L:N` | Severity levels: Critical / High / Medium / Low |
-| `· Xs ago` | Age of the oldest scan result |
-| `⟳` | A background scan is currently running |
-| `no deps to scan` | No supported package manifest found |
-| `no code to scan` | No supported source files found |
-| `⚠ auth required` | Snyk CLI needs authentication |
+Reading left to right:
+
+```
+🔒 snyk
+```
+The statusline label — always present.
+
+```
+│ deps H:4 M:2 (6↑)
+```
+**SCA segment** (`snyk test`): dependency vulnerabilities found in your packages.
+- `deps` — identifies this as the open-source dependency scan
+- `H:4` — 4 High severity CVEs (orange)
+- `M:2` — 2 Medium severity CVEs (yellow)
+- `(6↑)` — all 6 have a fix available (upgrade or patch)
+- `C:` / `L:` also appear when Critical or Low issues exist
+
+```
+│ code H:2 M:3 (4↑)
+```
+**SAST segment** (`snyk code test`): security bugs in your own source code (XSS, SQLi, path traversal, command injection, etc.).
+- `code` — identifies this as the static analysis scan
+- `H:2` — 2 High severity code issues (orange)
+- `M:3` — 3 Medium severity code issues (yellow)
+- `(4↑)` — 4 of those have an auto-fix available
+
+```
+│ test-project · 5m ago
+```
+Project name and scan freshness — the age shown is the oldest of the two scan results, so you always know the least-fresh data point.
+
+```
+⟳
+```
+A background scan is currently running; the display will update once it completes.
+
+---
+
+**Other states the line can show:**
+
+```
+🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
+```
+Both scans came back clean — no issues found.
+
+```
+🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
+```
+SCA scan still in progress (first run or cache expired); SAST result is already available.
+
+```
+🔒 snyk │ no deps to scan │ no code to scan │ bare-project
+```
+Snyk found no supported manifest files (no `package.json`, `go.mod`, etc.) and no supported source code in this directory.
+
+```
+🔒 snyk │ ⚠ auth required  run: snyk auth
+```
+Snyk CLI is not authenticated — run `snyk auth` to fix.
+
+---
+
+**Color coding:**
+- 🔴 Red — Critical severity
+- 🟠 Orange — High severity
+- 🟡 Yellow — Medium severity
+- ⬜ Dim — Low severity / metadata
+- 🟢 Green — Clean (no issues)
 
 **Color coding:**
 - 🔴 Red — Critical severity
