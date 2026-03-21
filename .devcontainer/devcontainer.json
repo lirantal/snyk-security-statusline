@@ -14,16 +14,18 @@
     // --
     "postCreateCommand": {
         "git-setup": "git config --local commit.gpgsign false; git config --local core.pager \"less -R\";",
-        "pnpm-install": "pnpm install --force",
+        "pnpm-install": "[ -f package.json ] && pnpm install || true",
         "post-create": "bash .devcontainer/post-create.sh"
     },
     "postStartCommand": {
         // "rm-env-file": "rm -f ./.env.development",
-        "start-dev": "pnpm run dev"
+        "start-dev": "[ -f package.json ] && pnpm run dev || true"
     },
     "remoteUser": "node",
     "workspaceFolder": "/workspaces/${localWorkspaceFolderBasename}",
     "containerEnv": {
-        "NODE_ENV": "development"
+        "NODE_ENV": "development",
+        "ANTHROPIC_API_KEY": "${localEnv:ANTHROPIC_API_KEY}",
+        "SNYK_TOKEN": "${localEnv:SNYK_TOKEN}"
     }
 }
