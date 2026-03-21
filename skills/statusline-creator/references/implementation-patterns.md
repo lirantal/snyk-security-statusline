@@ -166,10 +166,24 @@ build_segment() {
 ## Single jq call pattern
 
 Make one `jq` call per cache file — multiple calls on the same file multiply latency.
-Use `IFS='|' read -r` to split the result into variables:
+Use `IFS='|' read -r` to split the result into shell variables:
 
 ```bash
-# snyk test (SCA) — JSON output
+# General pattern: extract N fields in one call, pipe-delimited
+IFS='|' read -r FIELD1 FIELD2 FIELD3 < <(
+    jq -r '[
+        (.some_field // "default" | tostring),
+        (.count_field // 0 | tostring),
+        ([.items[]? | select(.type == "x")] | length | tostring)
+    ] | join("|")' "$CACHE_FILE" 2>/dev/null || printf 'default|0|0'
+)
+```
+
+Always provide a fallback (`|| printf '...'`) in case the cache file is malformed.
+
+### Example: Snyk dependency scan (JSON output)
+
+```bash
 IFS='|' read -r OK TOTAL C H M L FIXABLE < <(
     jq -r '[
         (.ok // false | tostring),
@@ -181,9 +195,14 @@ IFS='|' read -r OK TOTAL C H M L FIXABLE < <(
         ([.vulnerabilities[]? | select(.isUpgradable == true or .isPatchable == true)] | length | tostring)
     ] | join("|")' "$CACHE_FILE" 2>/dev/null || printf 'false|0|0|0|0|0|0'
 )
+```
 
-# snyk code test (SAST) — SARIF 2.1.0 output
-# Severity mapping: error=High, warning=Medium, note=Low
+### Example: Snyk SAST scan (SARIF 2.1.0 output)
+
+SARIF is a standard format used by many static analysis tools. Severity lives in
+`results[].level` rather than a `severity` field: `error`=High, `warning`=Medium, `note`=Low.
+
+```bash
 IFS='|' read -r TOTAL H M L FIXABLE < <(
     jq -r '[
         (.runs[0].results | length | tostring),

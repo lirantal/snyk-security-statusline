@@ -34,7 +34,10 @@ slow operation (network call, CLI scan, API request) must run in the background 
 cache its result. The script always renders from cache; never from a live call.
 
 Read `references/protocol.md` at the start of every session — it covers the stdin
-JSON schema, the settings.json format, and ANSI output rules.
+JSON schema, the settings.json format, and ANSI output rules. The authoritative
+reference for the protocol is the official Claude Code statusline documentation at
+https://code.claude.com/docs/en/statusline.md — check it for new fields or behaviors
+not yet reflected in the reference files.
 Read `references/implementation-patterns.md` when writing or debugging the script —
 it covers the caching pattern, exit code handling, state machine, and jq recipes.
 
@@ -105,7 +108,7 @@ Create `statusline.sh` in the project root. Follow this structure (see `referenc
 
 Critical rules:
 - Use `|| exit_code=$?` to capture exit codes — never `|| true`, which loses them
-- Exit code 3 from most Snyk/security tools means "no supported project" — write a `.noscan` sentinel, not an error
+- Some CLI tools use exit code 3 to mean "no supported project/files" (distinct from a scan error) — detect this and write a `.noscan` sentinel rather than retrying indefinitely
 - Use `mkdir` for locking (POSIX-atomic), not `flock` or file touches
 - Make a single `jq` call per cache file — multiple calls on the same file are slow
 - The script runs in Claude's cwd — use `pwd` / `git rev-parse` to find the project
