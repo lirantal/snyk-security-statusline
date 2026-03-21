@@ -8,11 +8,11 @@
 #   • snyk code test  — SAST static analysis of your own source code
 #
 # Output format:
-#   🔒 snyk │ deps H:4 M:2 (6↑) │ code H:2 M:3 │ test-project · 5m ago ⟳
-#   🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
-#   🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
-#   🔒 snyk │ no deps to scan │ no code to scan │ bare-project
-#   🔒 snyk │ ⚠ auth required  run: snyk auth
+#   ⬡ snyk │ deps ● C:2 ● H:4 ● M:2 ↑6 │ code ● H:2 ● M:3 ↑4 │ my-project · 5m ⟳
+#   ⬡ snyk │ deps ✦ │ code ✦ │ my-app · 2m
+#   ⬡ snyk │ deps scanning... │ code ● H:2 ● M:3 │ my-app · 3m ⟳
+#   ⬡ snyk │ no deps to scan │ no code to scan │ bare-project
+#   ⬡ snyk │ ⚠ auth required  run: snyk auth
 #
 # Configuration (environment variables):
 #   SNYK_BIN              Path to snyk binary        (default: snyk)
@@ -32,13 +32,19 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/snyk-statusline"
 
 # ─── ANSI colors (RGB) ────────────────────────────────────────────────────────
 R=$'\033[0m'
-RED=$'\033[38;2;255;85;85m'
-ORANGE=$'\033[38;2;255;165;0m'
-YELLOW=$'\033[38;2;255;215;0m'
-GREEN=$'\033[38;2;80;250;123m'
-BLUE=$'\033[38;2;100;170;255m'
-DIM=$'\033[38;2;128;128;128m'
-WHITE=$'\033[38;2;220;220;220m'
+# Snyk brand
+SNYK=$'\033[38;2;168;85;247m'         # #A855F7 — Snyk electric purple
+# Severity (vivid, high-contrast)
+CRIT=$'\033[38;2;255;59;48m'          # #FF3B30 — critical red
+HIGH=$'\033[38;2;255;149;0m'          # #FF9500 — high orange
+MED=$'\033[38;2;255;204;0m'           # #FFCC00 — medium amber
+LOW=$'\033[38;2;142;132;168m'         # #8E84A8 — low muted purple-gray
+# Status
+CLEAN=$'\033[38;2;52;211;153m'        # #34D399 — emerald green (clean/secure)
+WARN=$'\033[38;2;255;149;0m'          # #FF9500 — warning orange
+# UI chrome
+DIM=$'\033[38;2;107;99;136m'          # #6B6388 — purple-tinted dim
+WHITE=$'\033[38;2;237;233;254m'       # #EDE9FE — lavender white (project name)
 SEP="${DIM}│${R}"
 
 # ─── Read Claude session data from stdin ──────────────────────────────────────
@@ -141,7 +147,7 @@ SAST_AGE=$(scan_age "$SAST_CACHE" "$SAST_NOSCAN")
 
 SCA_SCANNING=$( [[ -d "$SCA_LOCK"  ]] && printf 'true' || printf 'false' )
 SAST_SCANNING=$([[ -d "$SAST_LOCK" ]] && printf 'true' || printf 'false' )
-SPIN=$( ( $SCA_SCANNING || $SAST_SCANNING ) && printf " ${DIM}⟳${R}" || printf '' )
+SPIN=$( ( $SCA_SCANNING || $SAST_SCANNING ) && printf " ${SNYK}⟳${R}" || printf '' )
 
 # ─── Auth check (shared error files) ─────────────────────────────────────────
 is_auth_error() {
@@ -151,8 +157,8 @@ is_auth_error() {
 
 if is_auth_error "$SCA_ERR" || is_auth_error "$SAST_ERR"; then
     if [[ ! -f "$SCA_CACHE" ]] && [[ ! -f "$SAST_CACHE" ]]; then
-        printf '%s🔒 snyk%s %s %s⚠ auth required%s  run: snyk auth\n' \
-            "$BLUE" "$R" "$SEP" "$ORANGE" "$R"
+        printf '%s⬡ snyk%s %s %s⚠ auth required%s  run: snyk auth\n' \
+            "$SNYK" "$R" "$SEP" "$WARN" "$R"
         exit 0
     fi
 fi
@@ -182,19 +188,19 @@ build_sca_segment() {
     )
 
     if [[ "$OK" == "true" ]] || (( TOTAL == 0 )); then
-        printf '%sdeps%s %s✔%s' "$DIM" "$R" "$GREEN" "$R"
+        printf '%sdeps%s %s✦%s' "$DIM" "$R" "$CLEAN" "$R"
         return
     fi
 
     local sev=""
-    (( C > 0 )) && sev+="${RED}C:${C}${R} "
-    (( H > 0 )) && sev+="${ORANGE}H:${H}${R} "
-    (( M > 0 )) && sev+="${YELLOW}M:${M}${R} "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${DIM}L:${L}${R} "
+    (( C > 0 )) && sev+="${CRIT}● C:${C}${R} "
+    (( H > 0 )) && sev+="${HIGH}● H:${H}${R} "
+    (( M > 0 )) && sev+="${MED}● M:${M}${R} "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${LOW}● L:${L}${R} "
     sev="${sev% }"
 
     printf '%sdeps%s %s' "$DIM" "$R" "$sev"
-    (( FIXABLE > 0 )) && printf ' %s(%d↑)%s' "$DIM" "$FIXABLE" "$R"
+    (( FIXABLE > 0 )) && printf ' %s↑%d%s' "$DIM" "$FIXABLE" "$R"
 }
 
 # ─── Build SAST segment ───────────────────────────────────────────────────────
@@ -221,18 +227,18 @@ build_sast_segment() {
     )
 
     if (( TOTAL == 0 )); then
-        printf '%scode%s %s✔%s' "$DIM" "$R" "$GREEN" "$R"
+        printf '%scode%s %s✦%s' "$DIM" "$R" "$CLEAN" "$R"
         return
     fi
 
     local sev=""
-    (( H > 0 )) && sev+="${ORANGE}H:${H}${R} "
-    (( M > 0 )) && sev+="${YELLOW}M:${M}${R} "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${DIM}L:${L}${R} "
+    (( H > 0 )) && sev+="${HIGH}● H:${H}${R} "
+    (( M > 0 )) && sev+="${MED}● M:${M}${R} "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${LOW}● L:${L}${R} "
     sev="${sev% }"
 
     printf '%scode%s %s' "$DIM" "$R" "$sev"
-    (( FIXABLE > 0 )) && printf ' %s(%d↑)%s' "$DIM" "$FIXABLE" "$R"
+    (( FIXABLE > 0 )) && printf ' %s↑%d%s' "$DIM" "$FIXABLE" "$R"
 }
 
 # ─── Compose final output ─────────────────────────────────────────────────────
@@ -242,13 +248,13 @@ SAST_SEG=$(build_sast_segment)
 # Show age of the oldest completed scan (most conservative freshness indicator)
 OLDEST_AGE=$(( SCA_AGE > SAST_AGE ? SCA_AGE : SAST_AGE ))
 if (( OLDEST_AGE < 999999 )); then
-    AGE_STR=" ${DIM}· $(fmt_age "$OLDEST_AGE") ago${R}"
+    AGE_STR=" ${DIM}· $(fmt_age "$OLDEST_AGE")${R}"
 else
     AGE_STR=""
 fi
 
-printf '%s🔒 snyk%s %s %s %s %s %s %s%s%s\n' \
-    "$BLUE" "$R" \
+printf '%s⬡ snyk%s %s %s %s %s %s %s%s%s\n' \
+    "$SNYK" "$R" \
     "$SEP" "$SCA_SEG" \
     "$SEP" "$SAST_SEG" \
     "$SEP" "${WHITE}${PROJECT}${R}" "$AGE_STR" "$SPIN"
