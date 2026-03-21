@@ -1,26 +1,28 @@
 # 🔒 Snyk Security Statusline for Claude Code
 
-A Claude Code statusline that shows **live vulnerability status** for your project while you code with Claude. Runs `snyk test` in the background and surfaces security issues directly in your Claude Code status bar.
+A Claude Code statusline that shows **live security status** for your project while you code with Claude. Runs two background scans — dependency vulnerabilities (SCA) and source code security issues (SAST) — and surfaces results directly in your Claude Code status bar.
 
 ## What it shows
 
 ```
-🔒 snyk │ ✘ 6 vulns (6 fixable) │ H:4 M:2 │ test-project · 5m ago ⟳
-🔒 snyk │ ✔ no issues │ my-app · 2m ago
-🔒 snyk │ test-project scanning deps...
-🔒 snyk │ no deps to scan
+🔒 snyk │ deps H:4 M:2 (6↑) │ code H:2 M:3 (4↑) │ test-project · 5m ago ⟳
+🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
+🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
+🔒 snyk │ no deps to scan │ no code to scan │ bare-project
 🔒 snyk │ ⚠ auth required  run: snyk auth
 ```
 
 | Segment | Meaning |
 |---|---|
-| `✔ no issues` | No vulnerabilities found |
-| `✘ N vulns` | N vulnerabilities detected |
-| `(N fixable)` | N issues have an available fix (upgrade/patch) |
-| `C:N H:N M:N L:N` | Count by severity: Critical / High / Medium / Low |
-| `· Xs ago` | How old the last scan result is |
+| `deps H:N M:N` | Dependency vulnerability counts by severity (SCA) |
+| `code H:N M:N` | Source code security issue counts by severity (SAST) |
+| `deps ✔` / `code ✔` | That scan found no issues |
+| `(N↑)` | N issues have an available fix |
+| `C:N H:N M:N L:N` | Severity levels: Critical / High / Medium / Low |
+| `· Xs ago` | Age of the oldest scan result |
 | `⟳` | A background scan is currently running |
-| `no deps to scan` | No supported manifest found in this directory |
+| `no deps to scan` | No supported package manifest found |
+| `no code to scan` | No supported source files found |
 | `⚠ auth required` | Snyk CLI needs authentication |
 
 **Color coding:**
@@ -50,41 +52,45 @@ When you're coding with Claude, security context lives in a different window, a 
 
 The result: you always have security status visible, updated continuously, with zero impact on Claude's response time.
 
-## What scan type is used — and why
+## What scans run — and why
 
-The statusline uses **`snyk test`** (open-source / SCA scanning). This scans your project's dependency manifest files (`package.json`, `requirements.txt`, `go.mod`, etc.) against Snyk's vulnerability database.
+The statusline runs two independent background scans on every project:
 
-### Snyk CLI scan types at a glance
-
-| Command | What it scans | Used by statusline |
+| Command | What it finds | Output format |
 |---|---|---|
-| `snyk test` | **Open-source dependencies** — finds known CVEs in your packages | ✅ Yes |
-| `snyk code test` | **SAST** — static analysis of your own source code for security bugs | Not yet |
-| `snyk iac test` | **Infrastructure as Code** — Terraform, Kubernetes, Helm, CloudFormation | Not yet |
-| `snyk container test` | **Container images** — OS packages inside Docker images | Not yet |
+| `snyk test` | **Open-source dependency CVEs** — known vulnerabilities in your packages (`package.json`, `requirements.txt`, `go.mod`, etc.) | JSON with `vulnerabilities[]` array |
+| `snyk code test` | **SAST** — security bugs in your own source code: SQLi, XSS, path traversal, command injection, hardcoded secrets, etc. | SARIF 2.1.0 with `runs[0].results[]` |
+| `snyk iac test` | Infrastructure as Code misconfigs — Terraform, K8s, Helm | Not yet |
+| `snyk container test` | OS packages inside Docker images | Not yet |
 
-**Why only `snyk test`?** Dependency scanning is the most universally applicable scan — it works on any project with a manifest file, runs in seconds, and is the highest-signal check for most developers day-to-day. SAST and IaC scans are slower and more context-specific.
+The two active scans complement each other: `snyk test` catches vulnerable third-party code you've pulled in; `snyk code test` catches security mistakes in code you've written.
 
-You can extend the scan scope using `SNYK_SCAN_ARGS` (e.g. `--all-projects` to scan monorepos) or run the other scan types manually alongside the statusline.
+### What data is surfaced
 
-### What data is surfaced from `snyk test`
+**From `snyk test` (deps):**
 
 | Data point | Source field | Shown as |
 |---|---|---|
-| Total vulnerability count | `uniqueCount` | `✘ N vulns` |
 | Severity breakdown | `vulnerabilities[].severity` | `C:N H:N M:N L:N` |
-| Fixable count | `isUpgradable \|\| isPatchable` | `(N fixable)` |
-| Project name | `projectName` | e.g. `test-project` |
-| Package manager | `packageManager` | (used internally) |
+| Fixable count | `isUpgradable \|\| isPatchable` | `(N↑)` |
+| No issues | `ok == true` | `deps ✔` |
+
+**From `snyk code test` (code):**
+
+| Data point | Source field | Shown as |
+|---|---|---|
+| Severity breakdown | SARIF `level`: `error`=High, `warning`=Medium, `note`=Low | `H:N M:N L:N` |
+| Fixable count | `results[].properties.isAutofixable` | `(N↑)` |
+| No issues | `results` is empty | `code ✔` |
 
 ## How it works
 
 1. When Claude Code starts, the statusline script is invoked after each assistant message.
-2. On first run (or when the cache is stale), it fires `snyk test --json` **in the background** — so your Claude session is never blocked.
-3. Results are cached in `~/.cache/snyk-statusline/` and refreshed every 5 minutes by default.
-4. You always see the last known result instantly; the `⟳` indicator tells you a fresher scan is underway.
+2. On first run (or when the cache is stale), both scans fire **in the background** independently — so your Claude session is never blocked.
+3. Results are cached separately in `~/.cache/snyk-statusline/` and refreshed every 5 minutes by default.
+4. You always see the last known result instantly; the `⟳` indicator shows when either scan is actively running.
 
-> **Performance note:** `snyk test` can take 10–30 seconds. The background caching means the statusline always renders immediately — it never blocks Claude.
+> **Performance note:** `snyk test` and `snyk code test` can each take 10–30 seconds. The two scans run in parallel in the background, so the statusline always renders immediately with no impact on Claude.
 
 ## Prerequisites
 

@@ -4,7 +4,11 @@
       "Bash(git clone:*)",
       "Bash(snyk:*)",
       "Bash(chmod:*)",
-      "Bash(./install.sh)"
+      "Bash(./install.sh)",
+      "Read(//home/node/test-project/**)",
+      "Bash(python3 -c \":*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ]
   }
 }

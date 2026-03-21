@@ -2,16 +2,22 @@
 # =============================================================================
 # Snyk Security Statusline for Claude Code
 # =============================================================================
-# Displays live vulnerability status for your project while coding with Claude.
+# Displays live vulnerability status for your project while you code with Claude.
+# Runs two independent background scans:
+#   • snyk test       — open-source dependency vulnerabilities (SCA)
+#   • snyk code test  — SAST static analysis of your own source code
 #
 # Output format:
-#   🔒 snyk │ ✔ no issues │ my-project · 2m ago
-#   🔒 snyk │ ✘ 6 vulns (6 fixable) │ H:4 M:2 │ test-project · 5m ago ⟳
+#   🔒 snyk │ deps H:4 M:2 (6↑) │ code H:2 M:3 │ test-project · 5m ago ⟳
+#   🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
+#   🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
+#   🔒 snyk │ no deps to scan │ no code to scan │ bare-project
+#   🔒 snyk │ ⚠ auth required  run: snyk auth
 #
 # Configuration (environment variables):
 #   SNYK_BIN              Path to snyk binary        (default: snyk)
 #   SNYK_STATUSLINE_TTL   Seconds between scans      (default: 300)
-#   SNYK_SHOW_LOW         Show low severity count     (default: false)
+#   SNYK_SHOW_LOW         Show low severity counts    (default: false)
 #   SNYK_SCAN_ARGS        Extra args for snyk test    (default: "")
 # =============================================================================
 
@@ -45,30 +51,39 @@ SESSION=$(cat)
 GIT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 PROJECT=$(basename "$GIT_ROOT")
 
-# ─── Cache paths ─────────────────────────────────────────────────────────────
+# ─── Cache paths (separate files per scan type) ───────────────────────────────
 mkdir -p "$CACHE_DIR"
-# Hash the project path to create a unique, stable cache key
 PATH_HASH=$(printf '%s' "$GIT_ROOT" | cksum | cut -d' ' -f1)
-CACHE_FILE="$CACHE_DIR/${PATH_HASH}.json"
-LOCK_DIR="$CACHE_DIR/${PATH_HASH}.lock"      # atomic mkdir-based lock
-ERR_FILE="$CACHE_DIR/${PATH_HASH}.err"
-META_FILE="$CACHE_DIR/${PATH_HASH}.meta"     # stores scan metadata
-NOSCAN_FILE="$CACHE_DIR/${PATH_HASH}.noscan" # sentinel: snyk exit 3 (no supported manifest)
 
-# ─── Helpers ─────────────────────────────────────────────────────────────────
-cache_age_seconds() {
-    # Consider both the result cache and the noscan sentinel as "fresh" states
-    local file
-    if   [[ -f "$CACHE_FILE"  ]]; then file="$CACHE_FILE"
-    elif [[ -f "$NOSCAN_FILE" ]]; then file="$NOSCAN_FILE"
-    else printf '999999'; return
-    fi
-    local mtime now
-    mtime=$(stat -c %Y "$file" 2>/dev/null \
-         || stat -f %m "$file" 2>/dev/null \
-         || printf '0')
-    now=$(date +%s)
-    printf '%d' $(( now - mtime ))
+# SCA: snyk test (dependency vulnerabilities)
+SCA_CACHE="$CACHE_DIR/${PATH_HASH}.sca.json"
+SCA_LOCK="$CACHE_DIR/${PATH_HASH}.sca.lock"
+SCA_ERR="$CACHE_DIR/${PATH_HASH}.sca.err"
+SCA_NOSCAN="$CACHE_DIR/${PATH_HASH}.sca.noscan"
+
+# SAST: snyk code test (source code security issues)
+SAST_CACHE="$CACHE_DIR/${PATH_HASH}.sast.json"
+SAST_LOCK="$CACHE_DIR/${PATH_HASH}.sast.lock"
+SAST_ERR="$CACHE_DIR/${PATH_HASH}.sast.err"
+SAST_NOSCAN="$CACHE_DIR/${PATH_HASH}.sast.noscan"
+
+# ─── Helpers ──────────────────────────────────────────────────────────────────
+# Age in seconds of a file (999999 if missing)
+file_age() {
+    local f="$1"
+    [[ -f "$f" ]] || { printf '999999'; return; }
+    local mtime
+    mtime=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f" 2>/dev/null || printf '0')
+    printf '%d' $(( $(date +%s) - mtime ))
+}
+
+# Age of a scan slot — whichever of cache or noscan sentinel is fresher
+scan_age() {
+    local cache="$1" noscan="$2"
+    local ca na
+    ca=$(file_age "$cache")
+    na=$(file_age "$noscan")
+    (( ca < na )) && printf '%d' "$ca" || printf '%d' "$na"
 }
 
 fmt_age() {
@@ -79,106 +94,161 @@ fmt_age() {
     fi
 }
 
-# ─── Background scan ─────────────────────────────────────────────────────────
-# Uses atomic mkdir-based locking so only one scan runs at a time across all
-# open terminal tabs / Claude Code windows for the same project.
-trigger_scan_bg() {
-    mkdir "$LOCK_DIR" 2>/dev/null || return  # already running
-
+# ─── Background scan: SCA (snyk test) ────────────────────────────────────────
+trigger_sca_bg() {
+    mkdir "$SCA_LOCK" 2>/dev/null || return  # already running
     (
-        # Ensure lock is always released on exit
-        trap 'rm -rf "$LOCK_DIR"' EXIT
-
+        trap 'rm -rf "$SCA_LOCK"' EXIT
         cd "$GIT_ROOT"
-        local tmp="$CACHE_FILE.tmp"
-
-        # Run snyk test; capture exit code explicitly:
-        #   0 = no vulns, 1 = vulns found (both produce valid JSON), 2 = error, 3 = no manifest
-        local exit_code=0
+        local tmp="$SCA_CACHE.tmp" exit_code=0
         # shellcheck disable=SC2086
-        "$SNYK_BIN" test --json $SNYK_SCAN_ARGS > "$tmp" 2>"$ERR_FILE" || exit_code=$?
-
+        "$SNYK_BIN" test --json $SNYK_SCAN_ARGS > "$tmp" 2>"$SCA_ERR" || exit_code=$?
         if (( exit_code == 3 )); then
-            # No supported project/manifest found in this directory
-            printf '%d' "$exit_code" > "$NOSCAN_FILE"
-            rm -f "$tmp"
+            printf '3' > "$SCA_NOSCAN"; rm -f "$tmp"
         elif [[ -s "$tmp" ]] && jq -e '.vulnerabilities' "$tmp" &>/dev/null; then
-            # Valid scan result (exit 0 or 1)
-            rm -f "$NOSCAN_FILE"  # clear stale noscan sentinel if project gained a manifest
-            mv "$tmp" "$CACHE_FILE"
-            printf '%s' "$(date +%s)" > "$META_FILE"
+            rm -f "$SCA_NOSCAN"; mv "$tmp" "$SCA_CACHE"
         else
-            rm -f "$tmp"  # partial/unrecognised output — leave state unchanged
+            rm -f "$tmp"
         fi
     ) &>/dev/null &
     disown
 }
 
-# ─── Check scan freshness & trigger if needed ─────────────────────────────────
-AGE=$(cache_age_seconds)
-(( AGE > CACHE_TTL )) && trigger_scan_bg
-SCANNING=$( [[ -d "$LOCK_DIR" ]] && printf 'true' || printf 'false' )
-SPIN=$( $SCANNING && printf " ${DIM}⟳${R}" || printf '' )
+# ─── Background scan: SAST (snyk code test) ──────────────────────────────────
+trigger_sast_bg() {
+    mkdir "$SAST_LOCK" 2>/dev/null || return  # already running
+    (
+        trap 'rm -rf "$SAST_LOCK"' EXIT
+        cd "$GIT_ROOT"
+        local tmp="$SAST_CACHE.tmp" exit_code=0
+        "$SNYK_BIN" code test --json > "$tmp" 2>"$SAST_ERR" || exit_code=$?
+        if (( exit_code == 3 )); then
+            printf '3' > "$SAST_NOSCAN"; rm -f "$tmp"
+        elif [[ -s "$tmp" ]] && jq -e '.runs[0].results' "$tmp" &>/dev/null; then
+            rm -f "$SAST_NOSCAN"; mv "$tmp" "$SAST_CACHE"
+        else
+            rm -f "$tmp"
+        fi
+    ) &>/dev/null &
+    disown
+}
 
-# ─── No result cache: show transient or terminal state ───────────────────────
-if [[ ! -f "$CACHE_FILE" ]]; then
-    if $SCANNING; then
-        printf '%s🔒 snyk%s %s %s%s%s scanning deps...%s\n' \
-            "$BLUE" "$R" "$SEP" "$WHITE" "$PROJECT" "$DIM" "$R"
-    elif [[ -f "$NOSCAN_FILE" ]]; then
-        # snyk test exited 3: no supported manifest in this directory
-        printf '%s🔒 snyk%s %s %sno deps to scan%s\n' \
-            "$BLUE" "$R" "$SEP" "$DIM" "$R"
-    elif [[ -s "$ERR_FILE" ]] && grep -qi 'auth\|token\|login\|authenticate' "$ERR_FILE" 2>/dev/null; then
+# ─── Trigger stale scans ──────────────────────────────────────────────────────
+SCA_AGE=$(scan_age "$SCA_CACHE" "$SCA_NOSCAN")
+SAST_AGE=$(scan_age "$SAST_CACHE" "$SAST_NOSCAN")
+(( SCA_AGE  > CACHE_TTL )) && trigger_sca_bg
+(( SAST_AGE > CACHE_TTL )) && trigger_sast_bg
+
+SCA_SCANNING=$( [[ -d "$SCA_LOCK"  ]] && printf 'true' || printf 'false' )
+SAST_SCANNING=$([[ -d "$SAST_LOCK" ]] && printf 'true' || printf 'false' )
+SPIN=$( ( $SCA_SCANNING || $SAST_SCANNING ) && printf " ${DIM}⟳${R}" || printf '' )
+
+# ─── Auth check (shared error files) ─────────────────────────────────────────
+is_auth_error() {
+    local err_file="$1"
+    [[ -s "$err_file" ]] && grep -qi 'auth\|token\|login\|authenticate' "$err_file" 2>/dev/null
+}
+
+if is_auth_error "$SCA_ERR" || is_auth_error "$SAST_ERR"; then
+    if [[ ! -f "$SCA_CACHE" ]] && [[ ! -f "$SAST_CACHE" ]]; then
         printf '%s🔒 snyk%s %s %s⚠ auth required%s  run: snyk auth\n' \
             "$BLUE" "$R" "$SEP" "$ORANGE" "$R"
-    else
-        printf '%s🔒 snyk%s %s %s%s%s initializing...%s\n' \
-            "$BLUE" "$R" "$SEP" "$WHITE" "$PROJECT" "$DIM" "$R"
+        exit 0
     fi
-    exit 0
 fi
 
-# ─── Parse cached results (single jq call for efficiency) ────────────────────
-IFS='|' read -r OK TOTAL PROJECT_NAME C H M L FIXABLE < <(
-    jq -r '[
-        (.ok // false | tostring),
-        (.uniqueCount // 0 | tostring),
-        (.projectName // "unknown"),
-        ([.vulnerabilities[]? | select(.severity == "critical")] | length | tostring),
-        ([.vulnerabilities[]? | select(.severity == "high")]     | length | tostring),
-        ([.vulnerabilities[]? | select(.severity == "medium")]   | length | tostring),
-        ([.vulnerabilities[]? | select(.severity == "low")]      | length | tostring),
-        ([.vulnerabilities[]? | select(.isUpgradable == true or .isPatchable == true)] | length | tostring)
-    ] | join("|")' "$CACHE_FILE" 2>/dev/null || printf 'false|0|unknown|0|0|0|0|0'
-)
+# ─── Build SCA segment ────────────────────────────────────────────────────────
+build_sca_segment() {
+    if $SCA_SCANNING && [[ ! -f "$SCA_CACHE" ]]; then
+        printf '%sdeps scanning...%s' "$DIM" "$R"; return
+    fi
+    if [[ -f "$SCA_NOSCAN" ]] && [[ ! -f "$SCA_CACHE" ]]; then
+        printf '%sno deps to scan%s' "$DIM" "$R"; return
+    fi
+    if [[ ! -f "$SCA_CACHE" ]]; then
+        printf '%sdeps initializing...%s' "$DIM" "$R"; return
+    fi
 
-# Use scanned project name if it matches our project (verify we're reading the right cache)
-[[ "$PROJECT_NAME" != "unknown" ]] && PROJECT="$PROJECT_NAME"
+    IFS='|' read -r OK TOTAL C H M L FIXABLE < <(
+        jq -r '[
+            (.ok // false | tostring),
+            (.uniqueCount // 0 | tostring),
+            ([.vulnerabilities[]? | select(.severity == "critical")] | length | tostring),
+            ([.vulnerabilities[]? | select(.severity == "high")]     | length | tostring),
+            ([.vulnerabilities[]? | select(.severity == "medium")]   | length | tostring),
+            ([.vulnerabilities[]? | select(.severity == "low")]      | length | tostring),
+            ([.vulnerabilities[]? | select(.isUpgradable == true or .isPatchable == true)] | length | tostring)
+        ] | join("|")' "$SCA_CACHE" 2>/dev/null || printf 'false|0|0|0|0|0|0'
+    )
 
-# ─── Build vulnerability status ───────────────────────────────────────────────
-if [[ "$OK" == "true" ]] || (( TOTAL == 0 )); then
-    VULN="${GREEN}✔ no issues${R}"
+    if [[ "$OK" == "true" ]] || (( TOTAL == 0 )); then
+        printf '%sdeps%s %s✔%s' "$DIM" "$R" "$GREEN" "$R"
+        return
+    fi
+
+    local sev=""
+    (( C > 0 )) && sev+="${RED}C:${C}${R} "
+    (( H > 0 )) && sev+="${ORANGE}H:${H}${R} "
+    (( M > 0 )) && sev+="${YELLOW}M:${M}${R} "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${DIM}L:${L}${R} "
+    sev="${sev% }"
+
+    printf '%sdeps%s %s' "$DIM" "$R" "$sev"
+    (( FIXABLE > 0 )) && printf ' %s(%d↑)%s' "$DIM" "$FIXABLE" "$R"
+}
+
+# ─── Build SAST segment ───────────────────────────────────────────────────────
+# SARIF severity mapping: error → high, warning → medium, note → low
+build_sast_segment() {
+    if $SAST_SCANNING && [[ ! -f "$SAST_CACHE" ]]; then
+        printf '%scode scanning...%s' "$DIM" "$R"; return
+    fi
+    if [[ -f "$SAST_NOSCAN" ]] && [[ ! -f "$SAST_CACHE" ]]; then
+        printf '%sno code to scan%s' "$DIM" "$R"; return
+    fi
+    if [[ ! -f "$SAST_CACHE" ]]; then
+        printf '%scode initializing...%s' "$DIM" "$R"; return
+    fi
+
+    IFS='|' read -r TOTAL H M L FIXABLE < <(
+        jq -r '[
+            (.runs[0].results | length | tostring),
+            ([.runs[0].results[]? | select(.level == "error")]   | length | tostring),
+            ([.runs[0].results[]? | select(.level == "warning")] | length | tostring),
+            ([.runs[0].results[]? | select(.level == "note")]    | length | tostring),
+            ([.runs[0].results[]? | select(.properties.isAutofixable == true)] | length | tostring)
+        ] | join("|")' "$SAST_CACHE" 2>/dev/null || printf '0|0|0|0|0'
+    )
+
+    if (( TOTAL == 0 )); then
+        printf '%scode%s %s✔%s' "$DIM" "$R" "$GREEN" "$R"
+        return
+    fi
+
+    local sev=""
+    (( H > 0 )) && sev+="${ORANGE}H:${H}${R} "
+    (( M > 0 )) && sev+="${YELLOW}M:${M}${R} "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${DIM}L:${L}${R} "
+    sev="${sev% }"
+
+    printf '%scode%s %s' "$DIM" "$R" "$sev"
+    (( FIXABLE > 0 )) && printf ' %s(%d↑)%s' "$DIM" "$FIXABLE" "$R"
+}
+
+# ─── Compose final output ─────────────────────────────────────────────────────
+SCA_SEG=$(build_sca_segment)
+SAST_SEG=$(build_sast_segment)
+
+# Show age of the oldest completed scan (most conservative freshness indicator)
+OLDEST_AGE=$(( SCA_AGE > SAST_AGE ? SCA_AGE : SAST_AGE ))
+if (( OLDEST_AGE < 999999 )); then
+    AGE_STR=" ${DIM}· $(fmt_age "$OLDEST_AGE") ago${R}"
 else
-    # Plural helper
-    [[ "$TOTAL" == "1" ]] && NOUN="vuln" || NOUN="vulns"
-    VULN="${RED}✘ ${TOTAL} ${NOUN}${R}"
-    (( FIXABLE > 0 )) && VULN+=" ${DIM}(${FIXABLE} fixable)${R}"
+    AGE_STR=""
 fi
 
-# ─── Build severity breakdown (only non-zero counts shown) ───────────────────
-SEV=""
-(( C > 0 )) && SEV+="${RED}C:${C}${R} "
-(( H > 0 )) && SEV+="${ORANGE}H:${H}${R} "
-(( M > 0 )) && SEV+="${YELLOW}M:${M}${R} "
-[[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && SEV+="${DIM}L:${L}${R} "
-SEV="${SEV% }"  # trim trailing space
-
-# ─── Build project + age segment ──────────────────────────────────────────────
-AGE_STR=$(fmt_age "$AGE")
-PROJ="${WHITE}${PROJECT}${R} ${DIM}· ${AGE_STR} ago${R}"
-
-# ─── Compose final output line ────────────────────────────────────────────────
-printf '%s🔒 snyk%s %s %s' "$BLUE" "$R" "$SEP" "$VULN"
-[[ -n "$SEV" ]] && printf ' %s %s' "$SEP" "$SEV"
-printf ' %s %s%s\n' "$SEP" "$PROJ" "$SPIN"
+printf '%s🔒 snyk%s %s %s %s %s %s %s%s%s\n' \
+    "$BLUE" "$R" \
+    "$SEP" "$SCA_SEG" \
+    "$SEP" "$SAST_SEG" \
+    "$SEP" "${WHITE}${PROJECT}${R}" "$AGE_STR" "$SPIN"
