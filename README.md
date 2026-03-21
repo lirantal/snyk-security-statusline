@@ -1,96 +1,90 @@
-# 🔒 Snyk Security Statusline for Claude Code
+# ⬡ Snyk Security Statusline for Claude Code
 
 A Claude Code statusline that shows **live security status** for your project while you code with Claude. Runs two background scans — dependency vulnerabilities (SCA) and source code security issues (SAST) — and surfaces results directly in your Claude Code status bar.
 
 ## What it shows
 
 ```
-🔒 snyk │ deps H:4 M:2 (6↑) │ code H:2 M:3 (4↑) │ test-project · 5m ago ⟳
+⬡ snyk │ deps ● H:4 ● M:2 ↑6 │ code ● H:2 ● M:3 ↑4 │ test-project · 5m ⟳
 ```
 
 Reading left to right:
 
 ```
-🔒 snyk
+⬡ snyk
 ```
-The statusline label — always present.
+The statusline label — always present. Rendered in Snyk's electric purple.
 
 ```
-│ deps H:4 M:2 (6↑)
+│ deps ● H:4 ● M:2 ↑6
 ```
 **SCA segment** (`snyk test`): dependency vulnerabilities found in your packages.
 - `deps` — identifies this as the open-source dependency scan
-- `H:4` — 4 High severity CVEs (orange)
-- `M:2` — 2 Medium severity CVEs (yellow)
-- `(6↑)` — all 6 have a fix available (upgrade or patch)
-- `C:` / `L:` also appear when Critical or Low issues exist
+- `● H:4` — 4 High severity CVEs (orange dot + label)
+- `● M:2` — 2 Medium severity CVEs (yellow dot + label)
+- `● C:N` / `● L:N` also appear when Critical or Low issues exist
+- `↑6` — all 6 have a fix available via upgrade or patch
 
 ```
-│ code H:2 M:3 (4↑)
+│ code ● H:2 ● M:3 ↑4
 ```
 **SAST segment** (`snyk code test`): security bugs in your own source code (XSS, SQLi, path traversal, command injection, etc.).
 - `code` — identifies this as the static analysis scan
-- `H:2` — 2 High severity code issues (orange)
-- `M:3` — 3 Medium severity code issues (yellow)
-- `(4↑)` — 4 of those have an auto-fix available
+- `● H:2` — 2 High severity code issues (orange)
+- `● M:3` — 3 Medium severity code issues (yellow)
+- `↑4` — 4 of those have an auto-fix available
 
 ```
-│ test-project · 5m ago
+│ test-project · 5m
 ```
 Project name and scan freshness — the age shown is the oldest of the two scan results, so you always know the least-fresh data point.
 
 ```
 ⟳
 ```
-A background scan is currently running; the display will update once it completes.
+A background scan is currently running; the display will update once it completes. Shown in Snyk purple.
 
 ---
 
 **Other states the line can show:**
 
 ```
-🔒 snyk │ deps ✔ │ code ✔ │ my-app · 2m ago
+⬡ snyk │ deps ✦ │ code ✦ │ my-app · 2m
 ```
-Both scans came back clean — no issues found.
+Both scans came back clean — no issues found. `✦` is shown in emerald green.
 
 ```
-🔒 snyk │ deps scanning... │ code H:2 M:3 │ my-app · 3m ago ⟳
+⬡ snyk │ deps scanning... │ code ● H:2 ● M:3 │ my-app · 3m ⟳
 ```
 SCA scan still in progress (first run or cache expired); SAST result is already available.
 
 ```
-🔒 snyk │ no deps to scan │ no code to scan │ bare-project
+⬡ snyk │ no deps to scan │ no code to scan │ bare-project
 ```
 Snyk found no supported manifest files (no `package.json`, `go.mod`, etc.) and no supported source code in this directory.
 
 ```
-🔒 snyk │ ⚠ auth required  run: snyk auth
+⬡ snyk │ ⚠ auth required  run: snyk auth
 ```
 Snyk CLI is not authenticated — run `snyk auth` to fix.
 
 ---
 
 **Color coding:**
+- 🟣 Snyk purple — label, spinner
 - 🔴 Red — Critical severity
 - 🟠 Orange — High severity
 - 🟡 Yellow — Medium severity
-- ⬜ Dim — Low severity / metadata
-- 🟢 Green — Clean (no issues)
-
-**Color coding:**
-- 🔴 Red — Critical severity
-- 🟠 Orange — High severity
-- 🟡 Yellow — Medium severity
-- ⬜ Dim — Low severity / metadata
-- 🟢 Green — Clean (no issues)
+- ⬜ Muted purple-gray — Low severity / metadata / separators
+- 🟢 Emerald green — Clean (no issues)
 
 ## Why this is useful
 
 When you're coding with Claude, security context lives in a different window, a CI dashboard, or nowhere at all. This statusline brings it into the same place you're working:
 
 - **Severity breakdown (C/H/M/L) at a glance** — know immediately if you have critical issues without leaving the editor
-- **Fixable count** — `(6 fixable)` tells you vulns have available upgrades, so action is clear and immediate
-- **Scan age** — `· 5m ago` shows how fresh the data is, so you know whether to trust it
+- **Fixable count** — `↑6` tells you vulns have available upgrades, so action is clear and immediate
+- **Scan age** — `· 5m` shows how fresh the data is, so you know whether to trust it
 - **Auth warning** — surfaces unauthenticated state so you know to run `snyk auth` before wasting time wondering why nothing scans
 - **Project name** — confirms you're looking at the right project, especially useful when switching between repos
 
@@ -123,17 +117,17 @@ The two active scans complement each other: `snyk test` catches vulnerable third
 
 | Data point | Source field | Shown as |
 |---|---|---|
-| Severity breakdown | `vulnerabilities[].severity` | `C:N H:N M:N L:N` |
-| Fixable count | `isUpgradable \|\| isPatchable` | `(N↑)` |
-| No issues | `ok == true` | `deps ✔` |
+| Severity breakdown | `vulnerabilities[].severity` | `● C:N ● H:N ● M:N ● L:N` |
+| Fixable count | `isUpgradable \|\| isPatchable` | `↑N` |
+| No issues | `ok == true` | `deps ✦` |
 
 **From `snyk code test` (code):**
 
 | Data point | Source field | Shown as |
 |---|---|---|
-| Severity breakdown | SARIF `level`: `error`=High, `warning`=Medium, `note`=Low | `H:N M:N L:N` |
-| Fixable count | `results[].properties.isAutofixable` | `(N↑)` |
-| No issues | `results` is empty | `code ✔` |
+| Severity breakdown | SARIF `level`: `error`=High, `warning`=Medium, `note`=Low | `● H:N ● M:N ● L:N` |
+| Fixable count | `results[].properties.isAutofixable` | `↑N` |
+| No issues | `results` is empty | `code ✦` |
 
 ## How it works
 
@@ -290,12 +284,13 @@ apk add jq
 ## Cache details
 
 - **Location:** `~/.cache/snyk-statusline/`
-- **Files per project:**
-  - `{hash}.json` — last scan result (raw `snyk test --json` output)
-  - `{hash}.err` — last scan stderr (useful for debugging auth issues)
-  - `{hash}.lock/` — atomic lock directory (present only while a scan is running)
-  - `{hash}.meta` — scan metadata
-- The hash is derived from the absolute path of the project's git root, so each project has its own independent cache.
+- **Files per project** (keyed by a hash of the git root path):
+  - `{hash}.sca.json` — last `snyk test` result
+  - `{hash}.sast.json` — last `snyk code test` result (SARIF)
+  - `{hash}.sca.err` / `{hash}.sast.err` — stderr from each scan (useful for debugging auth issues)
+  - `{hash}.sca.lock/` / `{hash}.sast.lock/` — atomic lock directories (present only while a scan is running)
+  - `{hash}.sca.noscan` / `{hash}.sast.noscan` — sentinel written when no supported project was found (exit code 3)
+- Each scan type has its own independent cache, so a slow SAST scan never blocks a fresh SCA result from showing.
 
 ## How the statusline protocol works
 
@@ -303,17 +298,17 @@ Claude Code invokes the statusline script after each assistant message, piping a
 
 ```json
 {
-  "model": "claude-opus-4-6",
-  "contextWindowPercent": 12.5,
-  "sessionCost": 0.042,
-  "gitBranch": "main",
-  "worktreeName": null,
-  "vimMode": "NORMAL",
-  "permissionMode": "default"
+  "model": { "id": "claude-opus-4-6", "display_name": "Opus" },
+  "cwd": "/your/project",
+  "workspace": { "current_dir": "/your/project", "project_dir": "/your/project" },
+  "context_window": { "used_percentage": 12, "remaining_percentage": 88 },
+  "cost": { "total_cost_usd": 0.042, "total_duration_ms": 45000 },
+  "vim": { "mode": "NORMAL" },
+  "worktree": { "name": "my-feature" }
 }
 ```
 
-The script reads this via `cat` on stdin, then prints its output to stdout. The output is rendered in Claude Code's status bar and supports ANSI color escape codes.
+The script reads this via `cat` on stdin, then prints its output to stdout. The output is rendered in Claude Code's status bar and supports ANSI RGB color escape codes.
 
 The script runs in the **same working directory** as your Claude Code session, which is how it knows which project to scan.
 
