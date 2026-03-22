@@ -4,9 +4,15 @@ A Claude Code statusline that shows **live security status** for your project wh
 
 ## What it shows
 
+Here's the statusline on Claude Code prompt in the terminal:
+
 ```
 ⬡ snyk │ deps ● H:4 ● M:2 ↑6 │ code ● H:2 ● M:3 ↑4 │ test-project · 5m ⟳
 ```
+
+Here's the statusline screenshot:
+
+<img width="1423" height="804" alt="image" src="https://github.com/user-attachments/assets/79ad62e2-cc60-46ae-a722-be88a70fcfa1" />
 
 Reading left to right:
 
