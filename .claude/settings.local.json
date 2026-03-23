@@ -10,7 +10,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Read(//home/node/.cache/snyk-statusline/**)",
-      "Bash(bash /workspaces/snyk-security-statusline/statusline.sh)"
+      "Bash(bash /workspaces/snyk-security-statusline/statusline.sh)",
+      "Bash(git pull:*)"
     ]
   }
 }
