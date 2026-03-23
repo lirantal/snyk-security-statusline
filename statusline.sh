@@ -53,6 +53,13 @@ HIGH_BG=$'\033[48;2;65;35;0m'         # dark orange bg
 MED_BG=$'\033[48;2;62;50;0m'          # dark amber bg
 LOW_BG=$'\033[48;2;42;40;52m'         # dark gray-purple bg
 
+# Severity: letter backgrounds (vivid) + shared dark letter text
+CRIT_LBG=$'\033[48;2;255;59;48m'      # vivid red bg
+HIGH_LBG=$'\033[48;2;255;149;0m'      # vivid orange bg
+MED_LBG=$'\033[48;2;255;204;0m'       # vivid amber bg
+LOW_LBG=$'\033[48;2;152;152;168m'     # vivid gray bg
+LETTER_FG=$'\033[38;2;30;15;10m'      # near-black letter text (legible on all vivid bgs)
+
 # Status
 CLEAN=$'\033[38;2;52;211;153m'        # #34D399 — emerald green (clean/secure)
 WARN=$'\033[38;2;255;149;0m'          # #FF9500 — warning orange
@@ -114,11 +121,11 @@ fmt_age() {
     fi
 }
 
-# Render a severity badge: count on a dark tinted background, letter in vivid color
-#   sev_badge COUNT LETTER BG_COLOR COUNT_COLOR LABEL_COLOR
+# Render a severity badge: count on dark tinted bg, letter on vivid bg with dark text
+#   sev_badge COUNT LETTER COUNT_BG COUNT_COLOR LETTER_BG
 sev_badge() {
-    local count="$1" letter="$2" bg="$3" num_fg="$4" label_fg="$5"
-    printf '%s%s %d %s%s%s%s' "$bg" "$num_fg" "$count" "$R" "$label_fg" "$letter" "$R"
+    local count="$1" letter="$2" count_bg="$3" num_fg="$4" letter_bg="$5"
+    printf '%s%s %d %s%s%s%s%s' "$count_bg" "$num_fg" "$count" "$R" "$letter_bg" "$LETTER_FG" "$letter" "$R"
 }
 
 # ─── Stale lock detection ─────────────────────────────────────────────────────
@@ -237,10 +244,10 @@ build_sca_segment() {
     fi
 
     local sev=""
-    (( C > 0 )) && sev+="$(sev_badge "$C" "C" "$CRIT_BG" "$CRIT_C" "$CRIT") "
-    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH") "
-    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED") "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW") "
+    (( C > 0 )) && sev+="$(sev_badge "$C" "C" "$CRIT_BG" "$CRIT_C" "$CRIT_LBG") "
+    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH_LBG") "
+    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED_LBG") "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW_LBG") "
     sev="${sev% }"
 
     printf '%sdeps%s %s' "$DIM" "$R" "$sev"
@@ -276,9 +283,9 @@ build_sast_segment() {
     fi
 
     local sev=""
-    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH") "
-    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED") "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW") "
+    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH_LBG") "
+    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED_LBG") "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW_LBG") "
     sev="${sev% }"
 
     printf '%scode%s %s' "$DIM" "$R" "$sev"
