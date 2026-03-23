@@ -181,6 +181,10 @@ trigger_sast_bg() {
             printf '3' > "$SAST_NOSCAN"; rm -f "$tmp"
         elif [[ -s "$tmp" ]] && jq -e '.runs[0].results' "$tmp" &>/dev/null; then
             rm -f "$SAST_NOSCAN"; mv "$tmp" "$SAST_CACHE"
+        elif [[ -s "$tmp" ]] && jq -e '.ok == false' "$tmp" &>/dev/null; then
+            # snyk code test exits 2 with {"ok":false,"error":"no files to scan",...}
+            # when the project type is unsupported — treat as noscan
+            printf '2' > "$SAST_NOSCAN"; rm -f "$tmp"
         else
             rm -f "$tmp"
         fi
