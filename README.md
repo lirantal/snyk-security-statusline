@@ -7,12 +7,12 @@ A Claude Code statusline that shows **live security status** for your project wh
 Here's the statusline on Claude Code prompt in the terminal:
 
 ```
-⬡ snyk │ deps ● H:4 ● M:2 ↑6 │ code ● H:2 ● M:3 ↑4 │ test-project · 5m ⟳
+⬡ snyk │ deps  2 C  4 H  2 M ↑6 │ code ✦ │ nodejs-goof · 5m
 ```
 
 Here's the statusline screenshot:
 
-<img width="1423" height="804" alt="image" src="https://github.com/user-attachments/assets/79ad62e2-cc60-46ae-a722-be88a70fcfa1" />
+<img width="1325" height="788" alt="image" src="https://github.com/user-attachments/assets/dc3ee6e7-4cb4-417e-a76d-33f7bcd68c50" />
 
 Reading left to right:
 
