@@ -22,22 +22,22 @@ Reading left to right:
 The statusline label — always present. Rendered in Snyk's electric purple.
 
 ```
-│ deps ● H:4 ● M:2 ↑6
+│ deps  4 H  2 M ↑6
 ```
 **SCA segment** (`snyk test`): dependency vulnerabilities found in your packages.
 - `deps` — identifies this as the open-source dependency scan
-- `● H:4` — 4 High severity CVEs (orange dot + label)
-- `● M:2` — 2 Medium severity CVEs (yellow dot + label)
-- `● C:N` / `● L:N` also appear when Critical or Low issues exist
+- ` 4 H` — 4 High severity CVEs: count on a dark background, severity letter on a vivid orange background
+- ` 2 M` — 2 Medium severity CVEs: count on dark background, letter on vivid amber background
+- ` 2 C` / ` 1 L` also appear when Critical (red) or Low (gray) issues exist
 - `↑6` — all 6 have a fix available via upgrade or patch
 
 ```
-│ code ● H:2 ● M:3 ↑4
+│ code  2 H  3 M ↑4
 ```
 **SAST segment** (`snyk code test`): security bugs in your own source code (XSS, SQLi, path traversal, command injection, etc.).
 - `code` — identifies this as the static analysis scan
-- `● H:2` — 2 High severity code issues (orange)
-- `● M:3` — 3 Medium severity code issues (yellow)
+- ` 2 H` — 2 High severity code issues
+- ` 3 M` — 3 Medium severity code issues
 - `↑4` — 4 of those have an auto-fix available
 
 ```
@@ -60,7 +60,7 @@ A background scan is currently running; the display will update once it complete
 Both scans came back clean — no issues found. `✦` is shown in emerald green.
 
 ```
-⬡ snyk │ deps scanning... │ code ● H:2 ● M:3 │ my-app · 3m ⟳
+⬡ snyk │ deps scanning... │ code  2 H  3 M │ my-app · 3m ⟳
 ```
 SCA scan still in progress (first run or cache expired); SAST result is already available.
 
@@ -123,7 +123,7 @@ The two active scans complement each other: `snyk test` catches vulnerable third
 
 | Data point | Source field | Shown as |
 |---|---|---|
-| Severity breakdown | `vulnerabilities[].severity` | `● C:N ● H:N ● M:N ● L:N` |
+| Severity breakdown | `vulnerabilities[].severity` | ` N C  N H  N M  N L` (badge per severity) |
 | Fixable count | `isUpgradable \|\| isPatchable` | `↑N` |
 | No issues | `ok == true` | `deps ✦` |
 
@@ -131,7 +131,7 @@ The two active scans complement each other: `snyk test` catches vulnerable third
 
 | Data point | Source field | Shown as |
 |---|---|---|
-| Severity breakdown | SARIF `level`: `error`=High, `warning`=Medium, `note`=Low | `● H:N ● M:N ● L:N` |
+| Severity breakdown | SARIF `level`: `error`=High, `warning`=Medium, `note`=Low | ` N H  N M  N L` (badge per severity) |
 | Fixable count | `results[].properties.isAutofixable` | `↑N` |
 | No issues | `results` is empty | `code ✦` |
 
@@ -267,6 +267,11 @@ snyk test
 # Check the error log for your project
 ls ~/.cache/snyk-statusline/
 cat ~/.cache/snyk-statusline/*.err
+```
+
+On macOS, `snyk` may be installed via a Node version manager (nvm, fnm) that adds it to PATH only in interactive shells. Background scans run in a plain subshell and may not inherit that PATH. Fix by pinning the binary path explicitly:
+```bash
+export SNYK_BIN=$(which snyk)
 ```
 
 **Snyk not found**
