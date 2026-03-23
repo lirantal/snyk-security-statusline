@@ -8,11 +8,11 @@
 #   • snyk code test  — SAST static analysis of your own source code
 #
 # Output format:
-#   ⬡ snyk │ deps ● C:2 ● H:4 ● M:2 ↑6 │ code ● H:2 ● M:3 ↑4 │ my-project · 5m ⟳
+#   ⬡ snyk │ deps 2C 4H 2M ↑6 │ code 2H 3M ↑4 │ my-project · 5m ⟳
 #   ⬡ snyk │ deps ✦ │ code ✦ │ my-app · 2m
-#   ⬡ snyk │ deps scanning... │ code ● H:2 ● M:3 │ my-app · 3m ⟳
+#   ⬡ snyk │ deps scanning... │ code 2H 3M │ my-app · 3m ⟳
 #   ⬡ snyk │ no deps to scan │ no code to scan │ bare-project
-#   ⬡ snyk │ ⚠ auth required  run: snyk auth
+#   ⬡ snyk │ ⚠ not authenticated  snyk whoami --experimental
 #
 # Configuration (environment variables):
 #   SNYK_BIN              Path to snyk binary        (default: snyk)
@@ -34,11 +34,25 @@ CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/snyk-statusline"
 R=$'\033[0m'
 # Snyk brand
 SNYK=$'\033[38;2;168;85;247m'         # #A855F7 — Snyk electric purple
-# Severity (vivid, high-contrast)
+
+# Severity: vivid label colors (the letter after the badge)
 CRIT=$'\033[38;2;255;59;48m'          # #FF3B30 — critical red
 HIGH=$'\033[38;2;255;149;0m'          # #FF9500 — high orange
-MED=$'\033[38;2;255;204;0m'           # #FFCC00 — medium amber
-LOW=$'\033[38;2;142;132;168m'         # #8E84A8 — low muted purple-gray
+MED=$'\033[38;2;255;204;0m'           # #FFCC00 — medium amber-yellow
+LOW=$'\033[38;2;152;152;168m'         # #9898A8 — low gray
+
+# Severity: badge count colors (muted text inside dark bg)
+CRIT_C=$'\033[38;2;200;80;70m'        # muted red
+HIGH_C=$'\033[38;2;200;130;50m'       # muted orange
+MED_C=$'\033[38;2;185;158;0m'         # muted amber
+LOW_C=$'\033[38;2;112;110;130m'       # muted gray
+
+# Severity: badge backgrounds (dark-tinted, matching each severity hue)
+CRIT_BG=$'\033[48;2;75;12;10m'        # dark red bg
+HIGH_BG=$'\033[48;2;65;35;0m'         # dark orange bg
+MED_BG=$'\033[48;2;62;50;0m'          # dark amber bg
+LOW_BG=$'\033[48;2;42;40;52m'         # dark gray-purple bg
+
 # Status
 CLEAN=$'\033[38;2;52;211;153m'        # #34D399 — emerald green (clean/secure)
 WARN=$'\033[38;2;255;149;0m'          # #FF9500 — warning orange
@@ -100,6 +114,13 @@ fmt_age() {
     fi
 }
 
+# Render a severity badge: count on a dark tinted background, letter in vivid color
+#   sev_badge COUNT LETTER BG_COLOR COUNT_COLOR LABEL_COLOR
+sev_badge() {
+    local count="$1" letter="$2" bg="$3" num_fg="$4" label_fg="$5"
+    printf '%s%s %d %s%s%s%s' "$bg" "$num_fg" "$count" "$R" "$label_fg" "$letter" "$R"
+}
+
 # ─── Stale lock detection ─────────────────────────────────────────────────────
 # If a background scan was killed (SIGKILL), the trap never ran and the lock
 # dir remains. Check if the owning PID is still alive; if not, clear the lock.
@@ -123,7 +144,7 @@ clear_stale_lock() {
 trigger_sca_bg() {
     mkdir "$SCA_LOCK" 2>/dev/null || return  # already running
     (
-        printf '%s' "$BASHPID" > "$SCA_LOCK/pid"
+        printf '%s' "${BASHPID:-}" > "$SCA_LOCK/pid"
         trap 'rm -rf "$SCA_LOCK"' EXIT
         cd "$GIT_ROOT"
         local tmp="$SCA_CACHE.tmp" exit_code=0
@@ -144,7 +165,7 @@ trigger_sca_bg() {
 trigger_sast_bg() {
     mkdir "$SAST_LOCK" 2>/dev/null || return  # already running
     (
-        printf '%s' "$BASHPID" > "$SAST_LOCK/pid"
+        printf '%s' "${BASHPID:-}" > "$SAST_LOCK/pid"
         trap 'rm -rf "$SAST_LOCK"' EXIT
         cd "$GIT_ROOT"
         local tmp="$SAST_CACHE.tmp" exit_code=0
@@ -180,7 +201,7 @@ is_auth_error() {
 
 if is_auth_error "$SCA_ERR" || is_auth_error "$SAST_ERR"; then
     if [[ ! -f "$SCA_CACHE" ]] && [[ ! -f "$SAST_CACHE" ]]; then
-        printf '%s⬡ snyk%s %s %s⚠ auth required%s  run: snyk auth\n' \
+        printf '%s⬡ snyk%s %s %s⚠ not authenticated%s  snyk whoami --experimental\n' \
             "$SNYK" "$R" "$SEP" "$WARN" "$R"
         exit 0
     fi
@@ -216,10 +237,10 @@ build_sca_segment() {
     fi
 
     local sev=""
-    (( C > 0 )) && sev+="${CRIT}● C:${C}${R} "
-    (( H > 0 )) && sev+="${HIGH}● H:${H}${R} "
-    (( M > 0 )) && sev+="${MED}● M:${M}${R} "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${LOW}● L:${L}${R} "
+    (( C > 0 )) && sev+="$(sev_badge "$C" "C" "$CRIT_BG" "$CRIT_C" "$CRIT") "
+    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH") "
+    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED") "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW") "
     sev="${sev% }"
 
     printf '%sdeps%s %s' "$DIM" "$R" "$sev"
@@ -255,9 +276,9 @@ build_sast_segment() {
     fi
 
     local sev=""
-    (( H > 0 )) && sev+="${HIGH}● H:${H}${R} "
-    (( M > 0 )) && sev+="${MED}● M:${M}${R} "
-    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="${LOW}● L:${L}${R} "
+    (( H > 0 )) && sev+="$(sev_badge "$H" "H" "$HIGH_BG" "$HIGH_C" "$HIGH") "
+    (( M > 0 )) && sev+="$(sev_badge "$M" "M" "$MED_BG"  "$MED_C"  "$MED") "
+    [[ "$SHOW_LOW" == "true" ]] && (( L > 0 )) && sev+="$(sev_badge "$L" "L" "$LOW_BG" "$LOW_C" "$LOW") "
     sev="${sev% }"
 
     printf '%scode%s %s' "$DIM" "$R" "$sev"

@@ -65,8 +65,9 @@ chmod +x "$SCRIPT_PATH"
 ok "Made $SCRIPT_PATH executable"
 
 # Check snyk auth
-if ! snyk whoami &>/dev/null; then
-    info "Snyk is not authenticated. Run ${BOLD}snyk auth${R} to log in."
+if ! snyk whoami --experimental &>/dev/null; then
+    info "Snyk is not authenticated. Run ${BOLD}snyk auth${R} to complete the OAuth flow."
+    info "Once authenticated, verify with: ${BOLD}snyk whoami --experimental${R}"
     info "The statusline will show an auth warning until you authenticate."
 fi
 

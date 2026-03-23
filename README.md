@@ -64,9 +64,9 @@ SCA scan still in progress (first run or cache expired); SAST result is already 
 Snyk found no supported manifest files (no `package.json`, `go.mod`, etc.) and no supported source code in this directory.
 
 ```
-⬡ snyk │ ⚠ auth required  run: snyk auth
+⬡ snyk │ ⚠ not authenticated  snyk whoami --experimental
 ```
-Snyk CLI is not authenticated — run `snyk auth` to fix.
+Snyk CLI is not authenticated — verify with `snyk whoami --experimental` (exit 0 = authenticated, exit 2 = not).
 
 ---
 
@@ -85,7 +85,7 @@ When you're coding with Claude, security context lives in a different window, a 
 - **Severity breakdown (C/H/M/L) at a glance** — know immediately if you have critical issues without leaving the editor
 - **Fixable count** — `↑6` tells you vulns have available upgrades, so action is clear and immediate
 - **Scan age** — `· 5m` shows how fresh the data is, so you know whether to trust it
-- **Auth warning** — surfaces unauthenticated state so you know to run `snyk auth` before wasting time wondering why nothing scans
+- **Auth warning** — surfaces unauthenticated state so you can verify with `snyk whoami --experimental` before wasting time wondering why nothing scans
 - **Project name** — confirms you're looking at the right project, especially useful when switching between repos
 
 ### Why background caching?
@@ -143,7 +143,7 @@ The two active scans complement each other: `snyk test` catches vulnerable third
 - [**Claude Code**](https://claude.ai/code) installed and authenticated
 - [**Snyk CLI**](https://docs.snyk.io/snyk-cli/install-or-update-the-snyk-cli) — `npm install -g snyk`
 - [**jq**](https://jqlang.github.io/jq/) — `apt install jq` / `brew install jq`
-- **Snyk account** (free tier works) — authenticate with `snyk auth`
+- **Snyk account** (free tier works) — authenticate once with `snyk auth`, then verify with `snyk whoami --experimental`
 
 ## Quick start
 
@@ -153,7 +153,8 @@ git clone https://github.com/your-org/snyk-security-statusline
 cd snyk-security-statusline
 
 # 2. Authenticate with Snyk (if not already done)
-snyk auth
+snyk auth                        # completes OAuth flow in browser
+snyk whoami --experimental       # verify: exit 0 = authenticated
 
 # 3. Run the installer
 ./install.sh
@@ -189,6 +190,12 @@ chmod +x /absolute/path/to/snyk-security-statusline/statusline.sh
 
 ```bash
 ./install.sh --remove
+```
+
+To also remove cached scan results:
+
+```bash
+rm -rf ~/.cache/snyk-statusline
 ```
 
 ## Configuration
@@ -240,10 +247,10 @@ export SNYK_SCAN_ARGS="--org=my-org-id"
 
 ## Troubleshooting
 
-**Statusline shows "auth required"**
+**Statusline shows "not authenticated"**
 ```bash
-snyk auth          # opens browser to authenticate
-snyk whoami        # verify authentication
+snyk whoami --experimental   # exit 0 = authenticated, exit 2 = not
+snyk auth                    # run ONLY if not authenticated — re-running when already authed resets credentials
 ```
 
 **Statusline shows "initializing..." forever**
