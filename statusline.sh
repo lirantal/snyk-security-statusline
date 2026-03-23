@@ -100,10 +100,30 @@ fmt_age() {
     fi
 }
 
+# ─── Stale lock detection ─────────────────────────────────────────────────────
+# If a background scan was killed (SIGKILL), the trap never ran and the lock
+# dir remains. Check if the owning PID is still alive; if not, clear the lock.
+clear_stale_lock() {
+    local lock="$1"
+    [[ -d "$lock" ]] || return
+    local pid_file="$lock/pid"
+    if [[ -f "$pid_file" ]]; then
+        local pid
+        pid=$(< "$pid_file")
+        kill -0 "$pid" 2>/dev/null || rm -rf "$lock"
+    else
+        # No PID file yet (lock just created) or legacy lock — fall back to age
+        local age
+        age=$(file_age "$lock")
+        (( age > CACHE_TTL )) && rm -rf "$lock"
+    fi
+}
+
 # ─── Background scan: SCA (snyk test) ────────────────────────────────────────
 trigger_sca_bg() {
     mkdir "$SCA_LOCK" 2>/dev/null || return  # already running
     (
+        printf '%s' "$BASHPID" > "$SCA_LOCK/pid"
         trap 'rm -rf "$SCA_LOCK"' EXIT
         cd "$GIT_ROOT"
         local tmp="$SCA_CACHE.tmp" exit_code=0
@@ -124,6 +144,7 @@ trigger_sca_bg() {
 trigger_sast_bg() {
     mkdir "$SAST_LOCK" 2>/dev/null || return  # already running
     (
+        printf '%s' "$BASHPID" > "$SAST_LOCK/pid"
         trap 'rm -rf "$SAST_LOCK"' EXIT
         cd "$GIT_ROOT"
         local tmp="$SAST_CACHE.tmp" exit_code=0
@@ -145,6 +166,8 @@ SAST_AGE=$(scan_age "$SAST_CACHE" "$SAST_NOSCAN")
 (( SCA_AGE  > CACHE_TTL )) && trigger_sca_bg
 (( SAST_AGE > CACHE_TTL )) && trigger_sast_bg
 
+clear_stale_lock "$SCA_LOCK"
+clear_stale_lock "$SAST_LOCK"
 SCA_SCANNING=$( [[ -d "$SCA_LOCK"  ]] && printf 'true' || printf 'false' )
 SAST_SCANNING=$([[ -d "$SAST_LOCK" ]] && printf 'true' || printf 'false' )
 SPIN=$( ( $SCA_SCANNING || $SAST_SCANNING ) && printf " ${SNYK}⟳${R}" || printf '' )

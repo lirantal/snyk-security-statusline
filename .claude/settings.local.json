@@ -8,7 +8,9 @@
       "Read(//home/node/test-project/**)",
       "Bash(python3 -c \":*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Read(//home/node/.cache/snyk-statusline/**)",
+      "Bash(bash /workspaces/snyk-security-statusline/statusline.sh)"
     ]
   }
 }
