@@ -331,3 +331,7 @@ The script reads this via `cat` on stdin, then prints its output to stdout. The 
 The script runs in the **same working directory** as your Claude Code session, which is how it knows which project to scan.
 
 See the [Claude Code statusline documentation](https://code.claude.com/docs/en/statusline.md) for the full protocol spec.
+
+## Contributing
+
+Please consult [CONTRIBUTING](./CONTRIBUTING.md) for guidelines on contributing to this project.
