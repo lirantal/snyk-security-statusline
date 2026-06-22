@@ -332,6 +332,10 @@ The script runs in the **same working directory** as your Claude Code session, w
 
 See the [Claude Code statusline documentation](https://code.claude.com/docs/en/statusline.md) for the full protocol spec.
 
+## Documentation
+
+- [Project documentation](./docs/README.md) - development, testing, architecture, and conventions.
+
 ## Contributing
 
 Please consult [CONTRIBUTING](./CONTRIBUTING.md) for guidelines on contributing to this project.
